@@ -1,0 +1,92 @@
+# Protocole d'exécution
+
+## Prérequis
+- Python 3.10+
+- `pip install -r requirements.txt`
+- Activation de l'environnement : `.\.venv\Scripts\activate` (Windows)
+
+Etape 1  :  build_mit_beats_csv.py --> Lecture des enregistrement MIT-BIH et création du csv contenant les battements avec leurs label et Filtrages des Leads
+
+	Résumé:lit la base brute MIT-BIH, extrait tous les battements, leur associe un label à 5 classes, 
+	découpe chaque battement en fenêtre de 187 points sur chaque lead, ajoute plein de méta-données, 
+	et produit un gros CSV prêt pour le Machine Learning : mitbih_187pts_fullmeta.csv.
+	En même temps le programme lit le  fichier multi-leads et crée un CSV propre avec uniquement les battements du lead MLII
+
+
+--Lancer---------->  python src/features/build_mit_beats_csv.py
+--On obtient ----->	 data/processed/mitbih_187pts_fullmeta.csv
+			 ----->	 data/processed/mitbih_187pts_MLII.csv
+
+
+Etape 2 :  split_mit_MLII_patient_level_60_40.py ----> Création de la base d'entrainement et de test
+
+	Résumé:Ce script prend le fichier mitbih_187pts_MLII.csv, fait un split au niveau patient : 
+	~40 % des patients en train, 60 % en test, en s’assurant que toutes les classes 0–4 apparaissent dans le train.
+	Ensuite il applique un undersampling sur le train (limite de battements par patient et par label, surtout pour la classe 0) 
+	pour réduire le déséquilibre, puis sauvegarde mitbih_187pts_MLII_train_patients.csv et mitbih_187pts_MLII_test_patients.csv.
+	
+--Lance-----------> python src/features/split_mit_MLII_patient_level_60_40.py
+--On obtient ----->	data/processed/mitbih_187pts_MLII_test_patients.csv
+			 -----> data/processed/mitbih_187pts_MLII_train_patients.csv
+
+
+Etape 4 : mit_MLII_XGBoost_opt_binary.py ----> Création et entrainement du model XGboost
+
+	Résumé : Ce script entraîne un XGBoost binaire sur les battements MIT-BIH (lead MLII) pour prédire normal (0) vs anormal (1) 
+	à partir des fichiers mitbih_187pts_MLII_train_patients.csv et mitbih_187pts_MLII_test_patients.csv.
+	Il binarise les labels, calcule des poids de classe, fait une RandomizedSearchCV (score F1), réentraîne le meilleur modèle, 
+	le sauvegarde dans xgb_mit_mlii_binary.pkl, puis évalue sur le test (seuils, F1, classification_report) 
+	et génère une matrice de confusion normalisée enregistrée en image (images/xgb_cm_mit_test.png), un tableau du rapport(xgb_report_mit_test.png) et un graphiques des scores (xgb_scores_mit_test.png).
+
+--Lance-----------> python src/models/mit_MLII_XGBoost_opt_binary.py
+--On obtient ----->	src/models/xgb_mit_mlii_binary.pkl
+			 -----> reports/figures/xgb_cm_mit_test.png
+			 -----> reports/figures/xgb_report_mit_test.png
+			 -----> reports/figures/xgb_scores_mit_test.png
+			 
+			 
+Etape .... :build_ptb_metadata.py--------> Compilation des metadata de la base PTB dans un csv 
+
+	Résumé:Ce script parcourt tous les fichiers .hea de la base PTB, lit les commentaires d’entête WFDB et en extrait des paires « clé : valeur » (age, sex, reason_for_admission, etc.) pour chaque enregistrement.
+	Il rassemble tout ça dans un DataFrame pandas, force un ensemble de colonnes dans un ordre donné, puis sauvegarde le CSV propre ptb_metadata_all.cleaned.csv dans data/processed.
+	
+--Lance-----------> python src/features/build_ptb_metadata.py
+--On obtient ----->	data/processed/ptb_metadata_all.cleaned.csv
+			 
+
+Etape 5 :  build_ptb_beats_with_labels.py ---> Lecture des enregistrement PTB et création du csv contenant les battements avec leurs label
+
+	Résumé: Ce script parcourt tous les enregistrements PTB (ptb-diagnostic-ecg) : il lit les signaux, se cale sur le lead "ii", les resample à 360 Hz,
+	détecte les R-peaks et extrait autour de chaque R une fenêtre de 187 points.
+	Il récupère ensuite, via les métadonnées, un healthy_label par couple (patient, record) (1 = healthy control, 0 = autre), 
+	le fusionne avec les battements, puis sauvegarde le tout dans ptb_beats_all_with_healthy_label.csv.
+	
+--Lance-----------> python src/features/build_ptb_beats_with_labels.py
+--On obtient ----->	data/processed/ptb_beats_all_with_healthy_label.csv
+
+
+
+Etape 6 : apply_xgb_on_ptb_beats_with_label.py ----> Applique le model XGBOOST entrainé sur la base MIT-BIH sur les battements de la base PTB
+
+	Résumé : Ce script charge le modèle XGBoost entraîné sur MIT (xgb_mit_mlii_binary.pkl) et l’applique à tous les battements PTB
+	du fichier ptb_beats_all_with_healthy_label.csv.
+	Pour chaque battement, il calcule la probabilité d’être malade (xgb_proba_malade), la prédiction binaire (xgb_pred_malade), 
+	puis construit les labels ground truth malade/healthy (gt_malade, gt_healthy) et les versions prédictives correspondantes.
+	Enfin, il ne garde que les colonnes utiles (patient, record, labels, proba, prédictions) 
+	et sauvegarde un CSV minimal ptb_beats_xgb_minimal_labels_only.csv pour faciliter l’analyse des performances du modèle.
+	
+--Lance-----------> python src/models/apply_xgb_on_ptb_beats_with_label.py
+--On obtient ----->	data/processed/ptb_beats_xgb_minimal_labels_only.csv
+
+Etape 7 :	ptb_patients_prediction.py   ----> Pédit si le patient et malade en fonction de l'applications du modèle XGBOOST à PTB
+
+	Résumé : Ce script prend le CSV de battements prédits par XGBoost et l’agrège au niveau patient : 
+	pour chaque patient, il compte le nombre total de battements et de battements prédits « malades », 
+	puis construit un label patient gt_malade à partir de healthy_label.
+	Avec la règle “≥ 1 battement anormal ⇒ patient malade”, il produit un CSV ptb_patients_pred_malade.csv 
+	(1 ligne par patient, avec GT et prédictions) et génère une matrice de confusion patients sain/malade, 
+	sauvegardée dans images/ptb_patients_confusion_malade_vs_sain.png.
+	
+--Lance-----------> python src/visualization/ptb_patients_prediction.py
+--On obtient ----->	data/processed/ptb_patients_pred_malade.csv 
+			------->reports/figures/ptb_patients_confusion_malade_vs_sain.png

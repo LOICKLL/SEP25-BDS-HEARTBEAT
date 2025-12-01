@@ -1,0 +1,12 @@
+# Dossier de données brutes / volumineuses
+data/
+
+# Environnement virtuel
+.venv/
+
+# Fichiers Python inutiles
+__pycache__/
+*.pyc
+
+# Checkpoints Jupyter
+.ipynb_checkpoints/
