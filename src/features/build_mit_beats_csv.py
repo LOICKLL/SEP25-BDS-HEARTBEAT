@@ -1,93 +1,75 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import wfdb
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from collections import Counter
 
 # 1) Dossiers du projet
-
-# Dossier où se trouve ce script
 THIS_DIR = Path(__file__).resolve().parent
-# Racine du projet
-PROJECT_ROOT = THIS_DIR.parent.parent 
-# Dossier qui contient les fichiers .dat/.hea/.atr
+PROJECT_ROOT = THIS_DIR.parent.parent
 DATA_DIR = PROJECT_ROOT / "data" / "raw" / "mit-bih-arrhythmia-database-1.0.0" / "mit-bih-arrhythmia-database-1.0.0"
-# Dossier de sortie pour les CSV
 OUT_DIR = PROJECT_ROOT / "data" / "processed"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-
-
 # 2) Paramètres de la fenêtre
-WIN_SIZE = 187            # nombre de points par battement
-HALF_WIN = WIN_SIZE // 2  # 93 points avant / après
+WIN_SIZE = 187
+HALF_WIN = WIN_SIZE // 2  # 93 de part et d'autre
 
-
-
-# 3) Mapping label ->
+# 3) Mapping AAMI -> label
 symbol_to_label = {
-    # N : battements normaux
-    "N": 0, "L": 0, "R": 0, "e": 0, "j": 0,
-    # S : battements supraventriculaires
-    "A": 1, "a": 1, "J": 1, "S": 1,
-    # V : battements ventriculaires
-    "V": 2, "E": 2,
-    # F : fusion
-    "F": 3,
-    # Q : rythmes "unknown"
-    "/": 4, "f": 4, "Q": 4,
+    "N": 0, "L": 0, "R": 0, "e": 0, "j": 0,     # N
+    "A": 1, "a": 1, "J": 1, "S": 1,            # S
+    "V": 2, "E": 2,                             # V
+    "F": 3,                                     # F
+    "/": 4, "f": 4, "Q": 4, "?": 4,             # Q
 }
-
-
+KEEP_UNKNOWN_IN_FULLMETA = True  # conserve les symboles inconnus avec label=-1 dans fullmeta
 
 def main():
-    # 4) Liste des enregistrements
     records = sorted({p.stem for p in DATA_DIR.glob("*.dat")})
     print("Enregistrements trouvés :", records)
-    rows = []
 
-    # 5) Boucle sur les enregistrements
+    rows_full = []  # fullmeta (toutes les métadonnées)
+    rows_min  = []  # minimal (pour MLII, sans -1)
+    unknown_sym_counter = Counter()
+
     for rec in records:
         print(f"\n===== Record {rec} =====")
-
-        # Lecture du signal
         record = wfdb.rdrecord(str(DATA_DIR / rec))
         sig = record.p_signal
-        fs = record.fs
-        sig_names = record.sig_name
+        fs = float(record.fs)
+        sig_names = list(record.sig_name)
         n_samples, n_leads = sig.shape
-        duree_sec = n_samples / fs
-        duree_min = duree_sec / 60
-        nb_signaux = n_leads
-        nb_echantillons = n_samples
 
+        duree_sec = n_samples / fs if fs > 0 else np.nan
+        duree_min = duree_sec / 60 if pd.notna(duree_sec) else np.nan
+        nb_signaux = int(n_leads)
+        nb_echantillons = int(n_samples)
 
-        # Récupération des metadata depuis le .hea
         comments = record.comments if record.comments is not None else []
         comment_full = " ".join(comments)
 
-
-        # Age + sexe 
+        # Age / sexe (approximatif selon headers)
         age = np.nan
         sexe = None
-
         if comment_full:
-            parts_space = comment_full.split()
+            parts = comment_full.split()
             try:
-                age = float(parts_space[0])
+                age = float(parts[0])
             except Exception:
                 age = np.nan
-            if len(parts_space) > 1:
-                sexe = parts_space[1]
+            if len(parts) > 1:
+                sexe = parts[1]
 
-        # noms des leads (ex. "MLII,V1")
         leads_str = ",".join(sig_names)
 
-        # Identifiants type Kaggle
         record_x = f"x_{rec}"
         record_num = int(rec)
         record_y = record_x
 
-        # Médicaments 
         meds = ""
         if "|" in comment_full:
             pipe_parts = [s.strip() for s in comment_full.split("|")]
@@ -95,100 +77,118 @@ def main():
                 meds = ", ".join(pipe_parts[1:-1])
         notes = comment_full
 
-        # Annotations (positions des battements)
         ann = wfdb.rdann(str(DATA_DIR / rec), "atr")
         r_locs = ann.sample
         symbols = ann.symbol
         nb_beats = len(r_locs)
-        bpm_moyen = 60 * nb_beats / duree_sec if duree_sec > 0 else np.nan
+        bpm_moyen = 60 * nb_beats / duree_sec if duree_sec and duree_sec > 0 else np.nan
 
-
-        # 6) Boucle sur chaque battement
-        for idx_local, (r_index, sym) in enumerate(zip(r_locs, symbols)):
-
-            # On garde seulement les symboles mappés dans nos 5 classes
-            if sym not in symbol_to_label:
-                continue
-            label = symbol_to_label[sym]
+        for r_index, sym in zip(r_locs, symbols):
+            # label = mapping ou -1 si inconnu
+            label = symbol_to_label.get(sym, -1)
+            if label == -1:
+                unknown_sym_counter[sym] += 1
 
             # Fenêtre autour du battement
             start = r_index - HALF_WIN
-            end = r_index + HALF_WIN + 1  
-
-            # On saute les battements trop proches du début/fin
+            end   = r_index + HALF_WIN + 1
             if start < 0 or end > n_samples:
                 continue
 
-            t_sec = r_index / fs
+            t_sec = float(r_index / fs) if fs > 0 else np.nan
             sample = int(r_index)
 
-            # Une ligne par lead (MLII et V1)
             for lead_idx in range(n_leads):
                 lead_name = sig_names[lead_idx]
                 segment = sig[start:end, lead_idx]
-
                 if len(segment) != WIN_SIZE:
                     continue
 
-                # Colonnes "meta"
-                row = {
-                    "record_x": record_x,
-                    "record_num": record_num,
-                    "sample": sample,
-                    "t_sec": float(t_sec),
-                    "lead": lead_name,
-                    "symbol": sym,
-                    "label": int(label),
-                    "record_y": record_y,
-                    "age": float(age),
-                    "sexe": sexe,
-                    "leads": leads_str,
-                    "fs": float(fs),
-                    "nb_signaux": int(nb_signaux),
-                    "nb_echantillons": int(nb_echantillons),
-                    "duree_sec": float(duree_sec),
-                    "duree_min": float(duree_min),
-                    "nb_beats": int(nb_beats),
-                    "bpm_moyen": float(bpm_moyen),
-                    "medications": meds,
-                    "notes": notes,
-                }
+                # LIGNE "FULLMETA": TOUTES LES METADONNEES (inclut -1 si KEEP_UNKNOWN_IN_FULLMETA) 
+                if (label != -1) or (label == -1 and KEEP_UNKNOWN_IN_FULLMETA):
+                    row_full = {
+                        "record_x": record_x,
+                        "record_num": record_num,
+                        "sample": sample,
+                        "t_sec": t_sec,
+                        "lead": lead_name,
+                        "symbol": sym,
+                        "label": int(label),
+                        "record_y": record_y,
+                        "age": float(age) if pd.notna(age) else np.nan,
+                        "sexe": sexe,
+                        "leads": leads_str,
+                        "fs": fs,
+                        "nb_signaux": nb_signaux,
+                        "nb_echantillons": nb_echantillons,
+                        "duree_sec": duree_sec,
+                        "duree_min": duree_min,
+                        "nb_beats": nb_beats,
+                        "bpm_moyen": bpm_moyen,
+                        "medications": meds,
+                        "notes": notes,
+                    }
+                    for i in range(WIN_SIZE):
+                        row_full[str(i)] = float(segment[i])
+                    rows_full.append(row_full)
 
-                # Colonnes 0..186 (les 187 points du battement)
-                for i in range(WIN_SIZE):
-                    row[str(i)] = float(segment[i])
+                #  LIGNE "MINIMALE": seulement pour MLII et uniquement si label != -1 
+                if (lead_name == "MLII") and (label != -1):
+                    row_min = {
+                        "record_x": record_x,
+                        "sample": sample,
+                        "t_sec": t_sec,
+                        "lead": lead_name,
+                        "symbol": sym,
+                        "label": int(label),
+                    }
+                    for i in range(WIN_SIZE):
+                        row_min[str(i)] = float(segment[i])
+                    rows_min.append(row_min)
 
-                rows.append(row)
+    # ===== DataFrames =====
+    df_full = pd.DataFrame(rows_full)
+    df_mlii = pd.DataFrame(rows_min)
 
-    # 7) DataFrame final et sauvegarde fullmeta
-    df = pd.DataFrame(rows)
+    # Colonnes signal à la fin (0..186)
+    cols_points = [str(i) for i in range(WIN_SIZE)]
 
-    # Ordre des colonnes 
-    cols_meta_debut = ["record_x", "record_num", "sample", "t_sec", "lead","symbol", "label", "record_y", "age", "sexe", "leads", "fs",
+    # --- FULLMETA : toutes les métadonnées d’abord, puis 0..186
+    cols_full_meta = [
+        "record_x", "record_num", "sample", "t_sec", "lead", "symbol", "label",
+        "record_y", "age", "sexe", "leads", "fs",
         "nb_signaux", "nb_echantillons", "duree_sec", "duree_min",
         "nb_beats", "bpm_moyen", "medications", "notes",
     ]
-    cols_points = [str(i) for i in range(WIN_SIZE)]
+    if not df_full.empty:
+        # garde uniquement les colonnes présentes (au cas où certaines metas manquent)
+        cols_full_meta_present = [c for c in cols_full_meta if c in df_full.columns]
+        cols_points_present = [c for c in cols_points if c in df_full.columns]
+        df_full = df_full[cols_full_meta_present + cols_points_present]
 
-    df = df[cols_meta_debut + cols_points ]
-
-    # CSV complet
     fullmeta_path = OUT_DIR / "mitbih_187pts_fullmeta.csv"
-    df.to_csv(fullmeta_path, index=False)
+    df_full.to_csv(fullmeta_path, index=False)
+    print("\nCSV fullmeta créé :", fullmeta_path, "->", df_full.shape)
 
-    print("\nCSV complet créé :", fullmeta_path)
-    print("Shape du DataFrame complet :", df.shape)
-    print(df.head())
+    # --- MLII (minimal, sans -1) : record_x, sample, t_sec, lead, symbol, label, puis 0..186
+    cols_min_meta = ["record_x", "sample", "t_sec", "lead", "symbol", "label"]
+    if not df_mlii.empty:
+        cols_min_meta_present = [c for c in cols_min_meta if c in df_mlii.columns]
+        cols_points_present = [c for c in cols_points if c in df_mlii.columns]
+        df_mlii = df_mlii[cols_min_meta_present + cols_points_present]
 
-    # 8) Filtrage uniquement du lead MLII et nouveau csv
-
-    df_mlii = df.loc[df["lead"] == "MLII"].copy()
     mlii_path = OUT_DIR / "mitbih_187pts_MLII.csv"
     df_mlii.to_csv(mlii_path, index=False)
+    print("CSV MLII (minimal, sans -1) créé :", mlii_path, "->", df_mlii.shape)
 
-    print("\nCSV MLII créé :", mlii_path)
-    print("Shape du DataFrame MLII :", df_mlii.shape)
-    print(df_mlii.head())
+
+    #  Récap des symboles inconnus
+    if unknown_sym_counter:
+        total_unknown = sum(unknown_sym_counter.values())
+        print("\n[INFO] Symboles non mappés (inclus dans fullmeta avec label=-1, exclus de MLII) :")
+        for k, v in unknown_sym_counter.most_common():
+            print(f"  {k!r}: {v}")
+        print(f"Total non mappés : {total_unknown}")
 
 if __name__ == "__main__":
     main()

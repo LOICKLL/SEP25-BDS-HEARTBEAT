@@ -18,14 +18,14 @@ Etape 1  :  build_mit_beats_csv.py --> Lecture des enregistrement MIT-BIH et cr�
 			 ----->	 data/processed/mitbih_187pts_MLII.csv
 
 
-Etape 2 :  split_mit_MLII_patient_level_60_40.py ----> Création de la base d'entrainement et de test
+Etape 2 :  split_mit_MLII_patient_level_20_80.py ----> Création de la base d'entrainement et de test
 
 	Résumé:Ce script prend le fichier mitbih_187pts_MLII.csv, fait un split au niveau patient : 
-	~40 % des patients en train, 60 % en test, en s’assurant que toutes les classes 0–4 apparaissent dans le train.
+	~80 % des patients en train, 20 % en test, en s’assurant que toutes les classes 0–4 apparaissent dans le train.
 	Ensuite il applique un undersampling sur le train (limite de battements par patient et par label, surtout pour la classe 0) 
 	pour réduire le déséquilibre, puis sauvegarde mitbih_187pts_MLII_train_patients.csv et mitbih_187pts_MLII_test_patients.csv.
 	
---Lance-----------> python src/features/split_mit_MLII_patient_level_60_40.py
+--Lance-----------> python src/features/split_mit_MLII_patient_level_20_80.py
 --On obtient ----->	data/processed/mitbih_187pts_MLII_test_patients.csv
 			 -----> data/processed/mitbih_187pts_MLII_train_patients.csv
 
