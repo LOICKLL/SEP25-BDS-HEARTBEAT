@@ -27,26 +27,28 @@ def save_classif_report_as_table(y_true, y_pred, title, outpath):
     """
     rep = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
 
-    # Ordonner les lignes : classes (triées), puis accuracy, macro avg, weighted avg
-    # Les clés des classes sont des strings ('0','1',...) ou int selon sklearn → on harmonise.
-    classes = sorted([k for k in rep.keys() if k.isdigit()], key=lambda x: int(x))
+    # Ordonner les lignes
+    classes = sorted([k for k in rep.keys() if str(k).isdigit()], key=lambda x: int(x))
     row_order = classes + ["accuracy", "macro avg", "weighted avg"]
 
-    # Construire le DataFrame
     rows = []
     for k in row_order:
-        d = rep[k] if isinstance(rep[k], dict) else {"precision": np.nan, "recall": np.nan, "f1-score": rep[k], "support": 0}
-        rows.append([
-            d.get("precision", np.nan),
-            d.get("recall", np.nan),
-            d.get("f1-score", np.nan),
-            int(d.get("support", 0)),
-        ])
+        if isinstance(rep.get(k), dict):
+            d = rep[k]
+            rows.append([
+                d.get("precision", np.nan),
+                d.get("recall", np.nan),
+                d.get("f1-score", np.nan),
+                int(d.get("support", 0)),
+            ])
+        else:
+            # "accuracy" est un float, on l’adapte
+            rows.append([np.nan, np.nan, rep.get(k, np.nan), 0])
+
     df_show = pd.DataFrame(
         rows, index=row_order, columns=["precision", "recall", "f1-score", "support"]
     )
 
-    # Mise en forme et rendu Matplotlib
     fig = plt.figure(figsize=(9, 3.8))
     fig.patch.set_facecolor("white")
     plt.axis("off")
@@ -62,17 +64,46 @@ def save_classif_report_as_table(y_true, y_pred, title, outpath):
     )
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(10)
-
-    # Lignes d’en-tête un peu plus grandes
     for (row, col), cell in tbl.get_celld().items():
         if row == 0:
             cell.set_text_props(fontweight="bold")
-        if col == -1:  # index (labels de lignes)
+        if col == -1:
             cell.set_text_props(fontweight="bold")
 
     outpath = Path(outpath)
     fig.savefig(outpath, dpi=150, bbox_inches="tight")
     plt.close(fig)
+
+# =============== Helper : deux matrices de confusion (counts & normalized) ===============
+def save_confusions(y_true, y_pred, title_prefix, basename, fig_dir: Path):
+    labels_sorted = sorted(np.unique(np.concatenate([y_true, y_pred])))
+    ticklabels = [str(x) for x in labels_sorted]
+
+    # 1) Brute (counts)
+    cm_counts = confusion_matrix(y_true, y_pred, labels=labels_sorted)
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(
+        cm_counts, annot=True, fmt="d", cmap="Blues", cbar=False,
+        xticklabels=ticklabels, yticklabels=ticklabels
+    )
+    plt.title(f"{title_prefix} – (comptes)")
+    plt.xlabel("Prédit"); plt.ylabel("Vrai")
+    plt.tight_layout()
+    plt.savefig(fig_dir / f"cm_{basename}_counts.png", dpi=150)
+    plt.close()
+
+    # 2) Normalisée (par ligne)
+    cm_norm = confusion_matrix(y_true, y_pred, labels=labels_sorted, normalize="true")
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(
+        cm_norm, annot=True, fmt=".2f", cmap="Blues", cbar=False,
+        xticklabels=ticklabels, yticklabels=ticklabels, vmin=0, vmax=1
+    )
+    plt.title(f"{title_prefix} – (normalisée)")
+    plt.xlabel("Prédit"); plt.ylabel("Vrai")
+    plt.tight_layout()
+    plt.savefig(fig_dir / f"cm_{basename}_norm.png", dpi=150)
+    plt.close()
 
 # ============================== LOAD ==============================
 df = pd.read_csv(CSV_IN, low_memory=False)
@@ -146,17 +177,10 @@ y_pred = model.predict(X_test)
 print(classification_report(y_test, y_pred))
 print("F1 weighted:", f1_score(y_test, y_pred, average="weighted"))
 
-# Confusion matrix
-cm = confusion_matrix(y_test, y_pred, normalize="true")
-plt.figure(figsize=(6,5))
-sns.heatmap(cm, annot=True, cmap="Blues", cbar=False, fmt=".2f")
-plt.title("Matrice de confusion – undersampling proportionnel")
-plt.xlabel("Prédit"); plt.ylabel("Vrai")
-plt.tight_layout()
-plt.savefig(FIG_DIR / "cm_under_prop_mlii.png", dpi=150)
-plt.close()
+save_confusions(y_test, y_pred,
+                "Matrice de confusion – undersampling proportionnel",
+                "under_prop_mlii", FIG_DIR)
 
-# Tableau du report
 save_classif_report_as_table(
     y_test, y_pred,
     "Classification report XGBOOST (Under-sampling proportionnel)",
@@ -187,14 +211,9 @@ y_pred = model.predict(X_test)
 print(classification_report(y_test, y_pred))
 print("F1 weighted:", f1_score(y_test, y_pred, average="weighted"))
 
-cm = confusion_matrix(y_test, y_pred, normalize="true")
-plt.figure(figsize=(6,5))
-sns.heatmap(cm, annot=True, cmap="Blues", cbar=False, fmt=".2f")
-plt.title("Matrice de confusion – undersampling équilibré")
-plt.xlabel("Prédit"); plt.ylabel("Vrai")
-plt.tight_layout()
-plt.savefig(FIG_DIR / "cm_under_bal_mlii.png", dpi=150)
-plt.close()
+save_confusions(y_test, y_pred,
+                "Matrice de confusion – undersampling équilibré",
+                "under_bal_mlii", FIG_DIR)
 
 save_classif_report_as_table(
     y_test, y_pred,
@@ -230,14 +249,9 @@ y_pred = model.predict(X_test)
 print(classification_report(y_test, y_pred))
 print("F1 weighted:", f1_score(y_test, y_pred, average="weighted"))
 
-cm = confusion_matrix(y_test, y_pred, normalize="true")
-plt.figure(figsize=(6,5))
-sns.heatmap(cm, annot=True, cmap="Blues", cbar=False, fmt=".2f")
-plt.title("Matrice de confusion – undersampling raisonné (N)")
-plt.xlabel("Prédit"); plt.ylabel("Vrai")
-plt.tight_layout()
-plt.savefig(FIG_DIR / "cm_underN_mlii.png", dpi=150)
-plt.close()
+save_confusions(y_test, y_pred,
+                "Matrice de confusion – undersampling raisonné (N)",
+                "underN_mlii", FIG_DIR)
 
 save_classif_report_as_table(
     y_test, y_pred,
@@ -274,14 +288,9 @@ y_pred = model.predict(X_test)
 print(classification_report(y_test, y_pred))
 print("F1 macro:", f1_score(y_test, y_pred, average="macro"))
 
-cm = confusion_matrix(y_test, y_pred, normalize="true")
-plt.figure(figsize=(6,5))
-sns.heatmap(cm, annot=True, cmap="Blues", cbar=False, fmt=".2f")
-plt.title("Matrice de confusion – AAMI (3 classes)")
-plt.xlabel("Prédit"); plt.ylabel("Vrai")
-plt.tight_layout()
-plt.savefig(FIG_DIR / "cm_aami_mlii.png", dpi=150)
-plt.close()
+save_confusions(y_test, y_pred,
+                "Matrice de confusion – AAMI (3 classes)",
+                "aami_mlii", FIG_DIR)
 
 save_classif_report_as_table(
     y_test, y_pred,
@@ -324,14 +333,9 @@ y_pred = model.predict(X_test)
 print(classification_report(y_test, y_pred))
 print("F1 weighted:", f1_score(y_test, y_pred, average="weighted"))
 
-cm = confusion_matrix(y_test, y_pred, normalize="true")
-plt.figure(figsize=(6,5))
-sns.heatmap(cm, annot=True, cmap="Blues", cbar=False, fmt=".2f")
-plt.title("Matrice de confusion – Binaire")
-plt.xlabel("Prédit"); plt.ylabel("Vrai")
-plt.tight_layout()
-plt.savefig(FIG_DIR / "cm_binary_mlii.png", dpi=150)
-plt.close()
+save_confusions(y_test, y_pred,
+                "Matrice de confusion – Binaire",
+                "binary_mlii", FIG_DIR)
 
 save_classif_report_as_table(
     y_test, y_pred,

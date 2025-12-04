@@ -1,0 +1,2 @@
+### SCORE CROSS-VALIDATION ###
+CV score : 0.764522

@@ -16,9 +16,57 @@ Etape 1  :  build_mit_beats_csv.py --> Lecture des enregistrement MIT-BIH et cr�
 --Lancer---------->  python src/features/build_mit_beats_csv.py
 --On obtient ----->	 data/processed/mitbih_187pts_fullmeta.csv
 			 ----->	 data/processed/mitbih_187pts_MLII.csv
+			 
+Etape 2 : exploration_MIT.py ---> Lecture de mitbih_187pts_fullmeta.csv et dataviz
+
+	Résumé : Charge mitbih_187pts_fullmeta.csv, harmonise quelques champs (sexe, labels) puis réalise une mini-EDA.
+	Génère des graphiques (répartition des classes par sexe/âge, heatmap corrélations, signaux moyens par classe, comptage par patient, scatter âge-bpm, distributions âge/genre/leads) et des tests χ² (label~sexe, label~âge).
+	Sauvegarde toutes les figures en PNG dans reports/figures/exploration_MIT. 
+	
+--Lancer----------> python src/visualization/exploration_MIT.py
+--On obtient -----> reports/figures/exploration_MIT/repartition_labels_global.png
+　　　　　　-----> reports/figures/exploration_MIT/repartition_labels_par_sexe.png
+　　　　　　-----> reports/figures/exploration_MIT/repartition_labels_par_age.png
+　　　　　　-----> reports/figures/exploration_MIT/heatmap_corr_age_sexe_label.png
+　　　　　　-----> reports/figures/exploration_MIT/signal_moyen_<classe>.png (une par classe)
+　　　　　　-----> reports/figures/exploration_MIT/signal_moyen_toutes_classes.png
+　　　　　　-----> reports/figures/exploration_MIT/nb_battements_par_type_et_patient.png
+　　　　　　-----> reports/figures/exploration_MIT/age_vs_bpm_scatter.png
+　　　　　　-----> reports/figures/exploration_MIT/age_box.png
+　　　　　　-----> reports/figures/exploration_MIT/age_hist.png
+　　　　　　-----> reports/figures/exploration_MIT/sexe_bar.png
+　　　　　　-----> reports/figures/exploration_MIT/leads_bar.png
 
 
-Etape 2 :  split_mit_MLII_patient_level_20_80.py ----> Création de la base d'entrainement et de test
+Etape 3 :  Undersampling_strategies_mlii.py ----> Différentes techniques d'undersampling
+
+	Résumé: Ce script prend le fichier mitbih_187pts_fullmeta.csv. Il compare différentes stratégies d'undersampling (proportionnel, équilibré sur minoritaire, 	seulement sur le N, classification par bin, classification AAMI 3-classes et classification binaire) qu'il applique sur un XGBoost basique, et affiche en 	sortie les résultats et les matrices de confusion de chaque stratégie.
+
+--Lance-----------> python src/features/Undersampling_strategies_mlii.py
+--On obtient ----->	-- On obtient ----->reports/figures/Preprocess_MIT/cm_under_prop_mlii_counts.png
+										reports/figures/Preprocess_MIT/cm_under_prop_mlii_norm.png
+										reports/figures/Preprocess_MIT/report_under_prop_mlii.png
+
+										reports/figures/Preprocess_MIT/cm_under_bal_mlii_counts.png
+										reports/figures/Preprocess_MIT/cm_under_bal_mlii_norm.png
+										reports/figures/Preprocess_MIT/report_under_bal_mlii.png
+
+										reports/figures/Preprocess_MIT/cm_underN_mlii_counts.png
+										reports/figures/Preprocess_MIT/cm_underN_mlii_norm.png
+										reports/figures/Preprocess_MIT/report_underN_mlii.png
+
+										reports/figures/Preprocess_MIT/cm_aami_mlii_counts.png
+										reports/figures/Preprocess_MIT/cm_aami_mlii_norm.png
+										reports/figures/Preprocess_MIT/report_aami_mlii.png
+
+										reports/figures/Preprocess_MIT/cm_binary_mlii_counts.png
+										reports/figures/Preprocess_MIT/cm_binary_mlii_norm.png
+										reports/figures/Preprocess_MIT/report_binary_mlii.png
+
+
+
+
+Etape 4 :  split_mit_MLII_patient_level_20_80.py ----> Création de la base d'entrainement et de test
 
 	Résumé:Ce script prend le fichier mitbih_187pts_MLII.csv, fait un split au niveau patient : 
 	~80 % des patients en train, 20 % en test, en s’assurant que toutes les classes 0–4 apparaissent dans le train.
@@ -30,19 +78,49 @@ Etape 2 :  split_mit_MLII_patient_level_20_80.py ----> Création de la base d'en
 			 -----> data/processed/mitbih_187pts_MLII_train_patients.csv
 
 
-Etape 4 : mit_MLII_XGBoost_opt_binary.py ----> Création et entrainement du model XGboost
+Etape 5 :  src/models/mit_MLII_XGB_binary.py----> Modélisation et optimisation d'un modèle XGBoost
 
-	Résumé : Ce script entraîne un XGBoost binaire sur les battements MIT-BIH (lead MLII) pour prédire normal (0) vs anormal (1) 
-	à partir des fichiers mitbih_187pts_MLII_train_patients.csv et mitbih_187pts_MLII_test_patients.csv.
-	Il binarise les labels, calcule des poids de classe, fait une RandomizedSearchCV (score F1), réentraîne le meilleur modèle, 
-	le sauvegarde dans xgb_mit_mlii_binary.pkl, puis évalue sur le test (seuils, F1, classification_report) 
-	et génère une matrice de confusion normalisée enregistrée en image (images/xgb_cm_mit_test.png), un tableau du rapport(xgb_report_mit_test.png) et un graphiques des scores (xgb_scores_mit_test.png).
+	Résumé: Ce script prend les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv en entrée, 	et applique un modèle basique XGBoost, un GridsearchCV, un SMOTE, et enfin un ADASYN, avant d'appliquer un seuil de décision de 0,3. Puis il enregistre le 	meilleur modèle. Il enregistre les reports, matrices de confusion et CV score dans le 	dossier /reports/figures/Modelisation_XGBoost.
 
---Lance-----------> python src/models/mit_MLII_XGBoost_opt_binary.py
---On obtient ----->	src/models/xgb_mit_mlii_binary.pkl
-			 -----> reports/figures/xgb_cm_mit_test.png
-			 -----> reports/figures/xgb_report_mit_test.png
-			 -----> reports/figures/xgb_scores_mit_test.png
+--Lance-----------> src/models/mit_MLII_XGB_binary.py
+--On obtient ----->	reports/figures/Modelisation_XGBoost/cm_XGB_baseline.png
+			reports/figures/Modelisation_XGBoost/report_XGB_baseline.txt
+
+			reports/figures/Modelisation_XGBoost/cm_XGB_gridsearchCV.png
+			reports/figures/Modelisation_XGBoost/report_XGB_gridsearchCV.txt
+			reports/figures/Modelisation_XGBoost/cv_score_XGB_gridsearchCV.txt
+
+			reports/figures/Modelisation_XGBoost/cm_XGB_SMOTE.png
+			reports/figures/Modelisation_XGBoost/report_XGB_SMOTE.txt
+			reports/figures/Modelisation_XGBoost/cv_score_XGB_SMOTE.txt
+
+			reports/figures/Modelisation_XGBoost/cm_XGB_adasyn.png
+			reports/figures/Modelisation_XGBoost/report_XGB_adasyn.txt
+			reports/figures/Modelisation_XGBoost/cv_score_XGB_adasyn.txt
+			
+Etape 6 :  src/models/mit_MLII_LogReg_binary.py----> Modélisation et optimisation d'un modèle de régression logistique
+
+	Résumé: Ce script prend les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv en entrée, 	et applique un modèle basique de regression logistique, un GridsearchCV sur un LBFGS, un GridsearchCV sur un SAGA, et enfin un dernier sur un ElasticNet, 	avant d'appliquer un seuil de décision de 0,3. Puis il enregistre le meilleur modèle. Il enregistre les reports, matrices de confusion et CV score dans le 	dossier /reports/figures/Modelisation_LogisticRegression
+
+--Lance-----------> src/models/mit_MLII_LogReg_binary.py
+--On obtient ----->	reports/figures/Modelisation_LogisticRegression/cm_LogReg_baseline.png
+			reports/figures/Modelisation_LogisticRegression/report_LogReg_baseline.txt
+
+			reports/figures/Modelisation_LogisticRegression/cm_LogReg_lbfgs_gridsearchCV.png
+			reports/figures/Modelisation_LogisticRegression/report_LogReg_lbfgs_gridsearchCV.txt
+			reports/figures/Modelisation_LogisticRegression/cv_score_LogReg_lbfgs_gridsearchCV.txt
+
+			reports/figures/Modelisation_LogisticRegression/cm_LogReg_saga_gridsearchCV.png
+			reports/figures/Modelisation_LogisticRegression/report_saga_lbfgs_gridsearchCV.txt
+			reports/figures/Modelisation_LogisticRegression/cv_score_saga_lbfgs_gridsearchCV.txt
+
+			reports/figures/Modelisation_LogisticRegression/cm_LogReg_elastic.png
+			reports/figures/Modelisation_LogisticRegression/report_elastic.txt
+			reports/figures/Modelisation_LogisticRegression/cv_score_elastic.txt
+
+			 
+			 
+			 
 			 
 			 
 Etape .... :build_ptb_metadata.py--------> Compilation des metadata de la base PTB dans un csv 
