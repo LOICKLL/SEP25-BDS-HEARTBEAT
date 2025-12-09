@@ -259,7 +259,125 @@ save_classif_report_as_table(
     FIG_DIR / "report_underN_mlii.png"
 )
 
-# =================== 4) AAMI (3 classes: N/S/V) ===================
+# ============ 4) SPLIT PAR BINS DE PATIENTS + UNDERSAMPLING PROPORTIONNEL ============
+print("\n### Split par BINS de patients + undersampling proportionnel ###")
+
+# Table patients x labels
+tab = df.groupby(["record_num", "label"]).size().unstack(fill_value=0)
+
+# Total de battements par patient
+tab["total"] = tab.sum(axis=1)
+
+# Ratio normal / anormal (0 = normal)
+tab["N_ratio"] = tab[0] / tab["total"].replace(0, np.nan)
+tab["abnormal_ratio"] = 1 - tab["N_ratio"]
+
+# Bins de patients selon le % d'anormal
+bins = [0, 0.01, 0.05, 0.2, 1.0]
+labels_bins = ["quasi_normaux", "un_peu_anormaux", "mixtes", "tres_anormaux"]
+tab["type"] = pd.cut(tab["abnormal_ratio"], bins=bins, labels=labels_bins)
+
+# Le patient a-t-il au moins un label 4 ?
+tab["has4"] = (tab[4] > 0).map({False: "no4", True: "has4"})
+
+train_patients = []
+test_patients  = []
+
+for name, grp in tab.groupby("type", observed=False):
+    record_per_bin = grp.index.to_numpy()
+    strat_labels   = grp["has4"].to_numpy()
+
+    # on tente une stratification sur "has4" si possible
+    if np.unique(strat_labels).size > 1 and grp["has4"].value_counts().min() >= 2:
+        train_p, test_p = train_test_split(
+            record_per_bin,
+            test_size=0.2,
+            random_state=42,
+            stratify=strat_labels
+        )
+    else:
+        # si pas assez de patients pour stratifier proprement
+        train_p, test_p = train_test_split(
+            record_per_bin,
+            test_size=0.2,
+            random_state=42,
+            shuffle=True
+        )
+
+    train_patients.extend(train_p)
+    test_patients.extend(test_p)
+    print(f"{name}: total {len(record_per_bin)} → train {len(train_p)}, test {len(test_p)}")
+
+train_patients = set(train_patients)
+test_patients  = set(test_patients)
+
+df_train_bins = df[df["record_num"].isin(train_patients)].reset_index(drop=True)
+df_test_bins  = df[df["record_num"].isin(test_patients)].reset_index(drop=True)
+
+print("\nRépartition finale des profils de patients :")
+print("Train:")
+print(tab.loc[list(train_patients), "type"].value_counts(normalize=True).sort_index())
+print("Test:")
+print(tab.loc[list(test_patients), "type"].value_counts(normalize=True).sort_index())
+
+print(f"\nNombre total de patients: {df['record_num'].nunique()}")
+print(f"→ Train: {len(train_patients)} patients")
+print(f"→ Test: {len(test_patients)} patients")
+
+# UNDERSAMPLING proportionnel sur le train "bins"
+N_TARGET_BINS = 20000
+n_train_bins = len(df_train_bins)
+f_bins = min(1.0, N_TARGET_BINS / n_train_bins)
+
+print(f"\nTrain (bins) avant undersampling : {n_train_bins} battements")
+print(f"Facteur d'échantillonnage f = {f_bins:.4f}")
+
+train_under_bins = (
+    df_train_bins
+        .groupby("label", group_keys=False)
+        .sample(frac=f_bins, random_state=42)
+        .reset_index(drop=True)
+)
+
+print("\nRépartition des labels après undersampling proportionnel (bins) :")
+print(train_under_bins["label"].value_counts().sort_index())
+print(train_under_bins["label"].value_counts(normalize=True).sort_index())
+print("Nombre de patients dans le train undersamplé (bins) :",
+      train_under_bins["record_num"].nunique())
+
+X_train = train_under_bins[signal_cols].values
+y_train = train_under_bins["label"].values
+X_test  = df_test_bins[signal_cols].values
+y_test  = df_test_bins["label"].values
+
+model = xgb.XGBClassifier(
+    objective="multi:softprob",
+    tree_method="hist",
+    n_jobs=-1,
+    random_state=42,
+    eval_metric="mlogloss",
+)
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+print("\n=== Résultats XGBoost – split par bins + undersampling proportionnel ===")
+print(classification_report(y_test, y_pred))
+print("F1 weighted:", f1_score(y_test, y_pred, average="weighted"))
+
+save_confusions(
+    y_test, y_pred,
+    "Matrice de confusion – bins patients + undersampling proportionnel",
+    "bins_under_prop_mlii",
+    FIG_DIR,
+)
+
+save_classif_report_as_table(
+    y_test, y_pred,
+    "Classification report XGBOOST (bins patients + under-sampling proportionnel)",
+    FIG_DIR / "report_bins_under_prop_mlii.png",
+)
+
+# =================== 5) AAMI (3 classes: N/S/V) ===================
 print("\n### AAMI (3 classes) ###")
 df_aami = df.copy()
 merge_map = {0: 0, 1: 1, 2: 2, 3: 0, 4: 0}
@@ -298,7 +416,7 @@ save_classif_report_as_table(
     FIG_DIR / "report_aami_mlii.png"
 )
 
-# =================== 5) BINAIRE (Normal vs Anormal) ===================
+# =================== 6) BINAIRE (Normal vs Anormal) ===================
 print("\n### Binaire (Normal vs Anormal) ###")
 df_bin = df.copy()
 df_bin["binary"] = (df_bin["label"] != 0).astype(int)

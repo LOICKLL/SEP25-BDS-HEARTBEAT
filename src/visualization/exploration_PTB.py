@@ -24,7 +24,7 @@ PROJECT_ROOT = THIS_DIR.parent.parent
 CSV_PATH = PROJECT_ROOT / "data" / "processed" / "ptb_metadata_all.cleaned.csv"
 OUT_DIR  = PROJECT_ROOT / "reports" / "figures" / "exploration_PTB"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
-SAVE_FIGS = True  # True = sauve les figures en PNG dans OUT_DIR
+SAVE_FIGS = True  
 
 # ====== OUTIL SAUVEGARDE/SHOW ======
 def save_or_show(name, fig=None):

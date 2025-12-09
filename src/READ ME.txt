@@ -80,7 +80,9 @@ Etape 4 :  split_mit_MLII_patient_level_20_80.py ----> Création de la base d'en
 
 Etape 5 :  src/models/mit_MLII_XGB_binary.py----> Modélisation et optimisation d'un modèle XGBoost
 
-	Résumé: Ce script prend les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv en entrée, 	et applique un modèle basique XGBoost, un GridsearchCV, un SMOTE, et enfin un ADASYN, avant d'appliquer un seuil de décision de 0,3. Puis il enregistre le 	meilleur modèle. Il enregistre les reports, matrices de confusion et CV score dans le 	dossier /reports/figures/Modelisation_XGBoost.
+	Résumé: Ce script prend les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv en entrée, 	
+		et applique un modèle basique XGBoost, un GridsearchCV, un SMOTE, et enfin un ADASYN, avant d'appliquer un seuil de décision de 0,3. Puis il enregistre le 	meilleur modèle. 
+		Il enregistre les reports, matrices de confusion et CV score dans le 	dossier /reports/figures/Modelisation_XGBoost.
 
 --Lance-----------> src/models/mit_MLII_XGB_binary.py
 --On obtient ----->	reports/figures/Modelisation_XGBoost/cm_XGB_baseline.png
@@ -100,7 +102,9 @@ Etape 5 :  src/models/mit_MLII_XGB_binary.py----> Modélisation et optimisation 
 			
 Etape 6 :  src/models/mit_MLII_LogReg_binary.py----> Modélisation et optimisation d'un modèle de régression logistique
 
-	Résumé: Ce script prend les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv en entrée, 	et applique un modèle basique de regression logistique, un GridsearchCV sur un LBFGS, un GridsearchCV sur un SAGA, et enfin un dernier sur un ElasticNet, 	avant d'appliquer un seuil de décision de 0,3. Puis il enregistre le meilleur modèle. Il enregistre les reports, matrices de confusion et CV score dans le 	dossier /reports/figures/Modelisation_LogisticRegression
+	Résumé: Ce script prend les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv en entrée, 	
+		et applique un modèle basique de regression logistique, un GridsearchCV sur un LBFGS, un GridsearchCV sur un SAGA, et enfin un dernier sur un ElasticNet, 	
+		avant d'appliquer un seuil de décision de 0,3. Puis il enregistre le meilleur modèle. Il enregistre les reports, matrices de confusion et CV score dans le 	dossier /reports/figures/Modelisation_LogisticRegression
 
 --Lance-----------> src/models/mit_MLII_LogReg_binary.py
 --On obtient ----->	reports/figures/Modelisation_LogisticRegression/cm_LogReg_baseline.png
@@ -118,12 +122,101 @@ Etape 6 :  src/models/mit_MLII_LogReg_binary.py----> Modélisation et optimisati
 			reports/figures/Modelisation_LogisticRegression/report_elastic.txt
 			reports/figures/Modelisation_LogisticRegression/cv_score_elastic.txt
 
+Etape 7 : src/models/mit_MLII_RandomForest_binary.py ----> Modélisation et optimisation d’un modèle Random Forest binaire
+
+	Résumé :Ce script prend les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv puis entraîne un Random Forest binaire.
+			Il réalise une recherche d’hyperparamètres via RandomizedSearchCV avec une GroupKFold(n_splits=3) .
+			Le meilleur modèle (selon le F1-score de la classe anormale) est ensuite ré-entraîné sur tout le jeu de train, puis évalué sur le jeu de test (patients jamais vus), avec analyse de plusieurs seuils de décision (0.2, 0.3, 0.4, 0.5, 0.6).
+			Enfin, le script sauvegarde le modèle Random Forest, la matrice de confusion normalisée, un graphique des scores (precision/recall/F1) et un tableau récapitulatif des scores dans le dossier reports/figures/Modelisation_RandomForest.			 
 			 
-			 
-			 
-			 
-			 
-Etape .... :build_ptb_metadata.py--------> Compilation des metadata de la base PTB dans un csv 
+--Lance----------->src/models/mit_MLII_RandomForest_binary.py
+
+--On obtient ----->models/rf_mit_mlii_binary.pkl 
+				reports/figures/Modelisation_RandomForest/rf_cm_mit_test.png
+				reports/figures/Modelisation_RandomForest/rf_scores_mit_test.png
+				reports/figures/Modelisation_RandomForest/rf_report_mit_test.png
+				
+				
+
+		 
+Etape 8 : src/models/mit_MLII_SVM_binary.py ----> Modélisation d’un SVM RBF binaire
+
+		Résumé :Ce script charge les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv (split par patients), en utilisant directement la colonne cible binary (0 = normal, 1 = anormal).
+				Il entraîne un SVM RBF dans un pipeline avec StandardScaler, fait une GridSearchCV (score F1) avec GroupKFold(n_splits=3) groupé par record_x pour éviter les fuites de patients, puis réentraîne le meilleur modèle sur tout le train.
+				Enfin, il évalue le modèle sur le test et génère la matrice de confusion normalisée, un barplot des scores (precision/recall/F1) et un tableau récapitulatif du classification_report.	 
+				
+--Lance----------->src/models/mit_MLII_SVM_binary.py
+
+--On obtient ----->models/svm_mit_mlii_binary.pkl
+
+					reports/figures/Modelisation_SVM/svm_cm_mit_test_binary.png
+
+					reports/figures/Modelisation_SVM/svm_scores_mit_test_binary.png
+
+					reports/figures/Modelisation_SVM/svm_report_mit_test_binary.png
+					
+					
+
+Etape 9 : src/models/mit_MLII_NN_binary.py ----> Modélisation d’un réseau de neurones fully-connected (MLP) binaire
+
+		Résumé :
+		Ce script charge les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv, sélectionne les 187 points du battement (colonnes "0" à "186") et binarise le label d’origine (label != 0 → 1, sinon 0).
+		Il applique ensuite un StandardScaler, sauvegarde le scaler et l’ordre des features, puis découpe le train en train/validation avec stratification.
+		Un MLP Keras (couches denses 128 → 64 avec BatchNorm + Dropout, sortie sigmoïde) est entraîné avec des class weights équilibrés, un EarlyStopping et un ModelCheckpoint suivant la métrique val_auc.
+		Le meilleur modèle est sauvegardé, réévalué sur le jeu de test patient-level, avec analyse de plusieurs seuils de décision, matrice de confusion normalisée, graphiques de loss/accuracy et tableau récapitulatif des scores.
+		
+		--Lance----------->src/models/mit_MLII_NN_binary.py
+
+--On obtient ----->Modèle, scaler, features & historique :
+
+					models/nn_mit_mlii_binary.keras
+
+					models/nn_mit_mlii_binary_history.pkl
+
+					models/scaler_mit_mlii_binary.pkl
+
+					models/nn_mit_mlii_binary_features.json
+
+					Figures dans reports/figures/Modelisation_NN/ :
+
+					reports/figures/Modelisation_NN/nn_loss.png
+
+					reports/figures/Modelisation_NN/nn_accuracy.png
+
+					reports/figures/Modelisation_NN/nn_cm_mit_test.png
+
+					reports/figures/Modelisation_NN/nn_scores_mit_test.png
+
+					reports/figures/Modelisation_NN/nn_report_mit_test.png
+					
+					
+Etape 10 : src/models/mit_MLII_CNN_binary.py ----> Modélisation d’un CNN 1D binaire sur MIT-BIH
+
+		Résumé :
+		Ce script charge les fichiers data/processed/mitbih_187pts_MLII_train_patients.csv et data/processed/mitbih_187pts_MLII_test_patients.csv, extrait les 187 points du battement (colonnes "0" à "186") et binarise le label d’origine (label != 0 → 1, sinon 0).
+		Les données sont standardisées avec un StandardScaler, puis reshaped au format (n_samples, 187, 1) pour un CNN 1D.
+		Le modèle est un CNN 1D séquentiel (3 blocs Conv1D + BatchNorm + MaxPooling, puis GlobalAveragePooling, Dense 64 + Dropout et sortie sigmoïde), entraîné avec class weights équilibrés, un EarlyStopping et un ModelCheckpoint monitorant val_auc.
+		Le meilleur modèle est évalué sur le jeu de test séparé par patients, avec analyse de plusieurs seuils de décision, matrice de confusion normalisée et un tableau récapitulatif des scores.
+					
+	
+--Lance----------->src/models/mit_MLII_CNN_binary.py
+
+--On obtient ----->Modèle sauvegardé :
+
+					models/cnn_mit_mlii_binary_best.keras
+
+					Figures dans reports/figures/Modelisation_CNN/ :
+
+					reports/figures/Modelisation_CNN/cnn_loss.png
+
+					reports/figures/Modelisation_CNN/cnn_accuracy.png
+
+					reports/figures/Modelisation_CNN/cnn_cm_mit_test.png
+
+					reports/figures/Modelisation_CNN/cnn_report_mit_test.png
+
+	
+Etape 11 :build_ptb_metadata.py--------> Compilation des metadata de la base PTB dans un csv 
 
 	Résumé:Ce script parcourt tous les fichiers .hea de la base PTB, lit les commentaires d’entête WFDB et en extrait des paires « clé : valeur » (age, sex, reason_for_admission, etc.) pour chaque enregistrement.
 	Il rassemble tout ça dans un DataFrame pandas, force un ensemble de colonnes dans un ordre donné, puis sauvegarde le CSV propre ptb_metadata_all.cleaned.csv dans data/processed.
@@ -132,7 +225,7 @@ Etape .... :build_ptb_metadata.py--------> Compilation des metadata de la base P
 --On obtient ----->	data/processed/ptb_metadata_all.cleaned.csv
 			 
 
-Etape 5 :  build_ptb_beats_with_labels.py ---> Lecture des enregistrement PTB et création du csv contenant les battements avec leurs label
+Etape 12 :  build_ptb_beats_with_labels.py ---> Lecture des enregistrement PTB et création du csv contenant les battements avec leurs label
 
 	Résumé: Ce script parcourt tous les enregistrements PTB (ptb-diagnostic-ecg) : il lit les signaux, se cale sur le lead "ii", les resample à 360 Hz,
 	détecte les R-peaks et extrait autour de chaque R une fenêtre de 187 points.
@@ -144,7 +237,7 @@ Etape 5 :  build_ptb_beats_with_labels.py ---> Lecture des enregistrement PTB et
 
 
 
-Etape 6 : apply_xgb_on_ptb_beats_with_label.py ----> Applique le model XGBOOST entrainé sur la base MIT-BIH sur les battements de la base PTB
+Etape 13 : apply_xgb_on_ptb_beats_with_label.py ----> Applique le model XGBOOST entrainé sur la base MIT-BIH sur les battements de la base PTB
 
 	Résumé : Ce script charge le modèle XGBoost entraîné sur MIT (xgb_mit_mlii_binary.pkl) et l’applique à tous les battements PTB
 	du fichier ptb_beats_all_with_healthy_label.csv.
@@ -156,7 +249,21 @@ Etape 6 : apply_xgb_on_ptb_beats_with_label.py ----> Applique le model XGBOOST e
 --Lance-----------> python src/models/apply_xgb_on_ptb_beats_with_label.py
 --On obtient ----->	data/processed/ptb_beats_xgb_minimal_labels_only.csv
 
-Etape 7 :	ptb_patients_prediction.py   ----> Pédit si le patient et malade en fonction de l'applications du modèle XGBOOST à PTB
+
+
+Etape 14 : src/models/apply_nn_on_ptb_beats_with_label_minimal_anti_fp.py ----> Application du NN MIT-BIH sur PTB avec logique anti-faux positifs
+
+		Résumé :
+		Le script charge le modèle Keras binaire MIT-BIH (nn_mit_mlii_binary.keras) et, si possible, le scaler associé. Il :
+		lit data/processed/ptb_beats_all_with_healthy_label.csv,normalise les features b0..b186 (scaler global ou standardisation par battement),
+		applique le NN pour obtenir nn_proba_malade,calibre éventuellement les proba (isotonic regression, 20 % des patients),
+		choisit un seuil pour viser une précision cible, calcule nn_pred_malade, gt_malade, correct et crée des alias xgb_proba_malade / xgb_pred_malade.
+
+--Lance----------->src/models/apply_nn_on_ptb_beats_with_label_minimal_anti_fp.py
+
+--On obtient ----->data/processed/ptb_beats_nn_minimal_labels_only.csv
+
+Etape 15 :	ptb_patients_prediction_xgb.py   ----> Pédit si le patient et malade en fonction de l'applications du modèle XGBOOST à PTB
 
 	Résumé : Ce script prend le CSV de battements prédits par XGBoost et l’agrège au niveau patient : 
 	pour chaque patient, il compte le nombre total de battements et de battements prédits « malades », 
@@ -168,3 +275,19 @@ Etape 7 :	ptb_patients_prediction.py   ----> Pédit si le patient et malade en f
 --Lance-----------> python src/visualization/ptb_patients_prediction.py
 --On obtient ----->	data/processed/ptb_patients_pred_malade.csv 
 			------->reports/figures/ptb_patients_confusion_malade_vs_sain.png
+
+
+Etape 13 : src/models/ptb_patient_pred_malade_nn.py ----> Agrégation par visite/patient des prédictions NN sur PTB
+
+		Résumé :
+		Ce script lit data/processed/ptb_beats_nn_minimal_labels_only.csv, puis vérifie la présence des colonnes de base (patient, healthy_label, record si dispo),
+		récupère une prédiction binaire par battement : soit directement (nn_pred_malade / pred_malade),soit en seuillant une proba (nn_proba_malade / proba_malade) à 0,5,
+		agrège les battements par visite (patient + record) si la colonne record existe, sinon par patient seul,
+		calcule pour chaque groupe : n_beats, n_pred_malade, healthy_label, puis gt_malade = 1 - healthy_label,
+		applique une règle de décision : si au moins THRESHOLD_ABNORMAL_BEATS (par défaut 1) battement est prédit malade → la visite/le patient est classé nn_pred_malade = 1,
+		sauvegarde un CSV agrégé et trace une matrice de confusion (sain/malade) au niveau visite/patient.
+
+--Lance----------->src/models/ptb_patient_pred_malade_nn.py
+
+--On obtient ----->data/processed/ptb_patient_pred_malade_nn.csv
+					reports/figures/ptb_eval_nn_pat/ptb_visits_confusion_malade_vs_sain.png

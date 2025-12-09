@@ -42,7 +42,7 @@ def main():
     group_keys = ["patient", "record"] if has_record else ["patient"]
 
     # 2) Obtenir une prédiction binaire NN par battement
-    #    On cherche d'abord une colonne de prédiction 0/1 ; sinon on seuillle la proba à 0.5.
+
     pred_col = _pick_col(beats, "nn_pred_malade", "pred_malade", required=False)
     proba_col = _pick_col(beats, "nn_proba_malade", "proba_malade", required=False)
 
@@ -102,12 +102,12 @@ def main():
         xticklabels=["Prédit sain", "Prédit malade"],
         yticklabels=["Vrai sain", "Vrai malade"],
     )
-    title = "Matrice de confusion visites (sain/malade)" if has_record else "Matrice de confusion patients (sain/malade)"
+    title = "Matrice de confusion patients (sain/malade)" if has_record else "Matrice de confusion patients (sain/malade)"
     plt.title(title)
     plt.xlabel("Prédiction NN")
     plt.ylabel("Vérité terrain (gt_malade)")
 
-    img_path = img_dir / ("ptb_visits_confusion_malade_vs_sain.png" if has_record else "ptb_patients_confusion_malade_vs_sain.png")
+    img_path = img_dir / ("ptb_patients_confusion_malade_vs_sain.png" if has_record else "ptb_patients_confusion_malade_vs_sain.png")
     plt.tight_layout()
     plt.savefig(img_path, dpi=150)
     plt.close()
